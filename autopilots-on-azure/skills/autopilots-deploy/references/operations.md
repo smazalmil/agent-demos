@@ -54,6 +54,31 @@ group. Suspend/delete policies must stay explicitly disabled. Customer-owned
 network/DNS/monitoring resources may be referenced, never imported into owned
 state. Shared Foundry is the explicit exception to per-stack isolation.
 
+## Existing Sandbox subnet sharing
+
+The same `platform.existing_sandbox_subnet_id` can be inherited by multiple
+stacks; per-stack overrides with separate subnets still work. Only the reference
+is shared, not resource groups, identities, Sandbox groups or Terraform state.
+The delegated Sandbox subnet cannot also be any stack's private endpoint subnet.
+Stacks must not import or manage the external subnet.
+
+Before any writes, verify service support for cross-group subnet sharing,
+same-region/subscription requirements, connection limits, existing leases and
+IP overhead. Include all existing consumers, not just selected stacks. Each
+private simulator stack adds four groups and VNet connections (simulator,
+gateway, runtime and generated-apps). Budget future application concurrency,
+rollout overlap and growth reserve, plus regional core quota and separate PE
+subnet capacity. Twelve new stacks plus an equivalent existing canary imply
+52 connections, not 13.
+
+Configuration validation and the deployer's `plan` are not capacity evidence.
+Do not assume `/26` is sufficient. The
+[service VNet guide](https://sandboxes.azure.com/docs/sandboxes/sandbox/vnet)
+suggests `/23` or larger as a safe default, but this is not a sharing guarantee
+or a sizing formula. If support, overhead, limits or expected concurrency are
+unknown, record the unresolved prerequisites and obtain evidence and operator
+approval before deployment. Never resize or replace the subnet automatically.
+
 ## Failure handling
 
 Stop after the first failing stage. Keep the same private state and ownership.

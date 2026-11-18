@@ -428,8 +428,97 @@ class SimulatorDeploymentTests(unittest.TestCase):
             self.assertEqual(len({report["resource_group"]["name"] for report in reports}), 7)
             self.assertTrue(all(report["model"]["capacity"] == 15 for report in reports))
             path.write_text(path.read_text().replace("/subnets/agent-dev", "/subnets/agent-6"))
-            with self.assertRaisesRegex(ValueError, "dedicated Sandbox subnet"):
+            dev, = load_stack_configs(path, ["agent-dev"])
+            self.assertTrue(dev["platform"]["existing_sandbox_subnet_id"].endswith("/subnets/agent-6"))
+            path.write_text(path.read_text().replace("rg-customer-agent-dev", "rg-customer-agent-6"))
+            with self.assertRaisesRegex(ValueError, "own resource group"):
                 load_stack_configs(path, ["agent-dev"])
+
+    def test_twelve_stacks_share_existing_subnet_without_sharing_state_or_foundry_ownership(self):
+        from scripts.simulator_preflight import plan
+
+        subnet = (
+            f"/subscriptions/{self.config()['subscription_id']}/resourceGroups/network"
+            "/providers/Microsoft.Network/virtualNetworks/training/subnets/sandbox"
+        )
+        account = (
+            f"/subscriptions/{self.config()['subscription_id']}/resourceGroups/central"
+            "/providers/Microsoft.CognitiveServices/accounts/shared"
+        )
+        text = self.input_text().replace(
+            'network_mode = "public"\nresource_group_mode = "create"',
+            'network_mode = "private"\nresource_group_mode = "existing"',
+        ).replace("[role]", (
+            'foundry_mode = "shared"\n[shared_foundry]\nmode = "existing"\n'
+            f'account_resource_id = "{account}"\n[role]'
+        )) + (
+            f'[platform]\nexisting_sandbox_subnet_id = "{subnet}"\n'
+            f'existing_private_endpoint_subnet_id = "{subnet.rsplit("/", 1)[0]}/endpoints"\n'
+            '[platform.private_dns_zone_ids]\n'
+        ) + "".join(
+            f'"{zone}" = "/subscriptions/{self.config()["subscription_id"]}/resourceGroups/dns'
+            f'/providers/Microsoft.Network/privateDnsZones/{zone}"\n'
+            for zone in (
+                "privatelink.cognitiveservices.azure.com", "privatelink.openai.azure.com",
+                "privatelink.services.ai.azure.com", "privatelink.swedencentral.azurecontainerapps.io",
+            )
+        ) + "".join(
+            f'[[stacks]]\nname = "agent-{index}"\n[stacks.platform]\n'
+            f'existing_resource_group_name = "rg-training-agent-{index}"\n'
+            for index in range(1, 13)
+        )
+        with tempfile.TemporaryDirectory() as temporary, patch.dict(
+            "os.environ", {"AUTOPILOTS_STATE_ROOT": temporary},
+        ):
+            path = Path(temporary) / "inputs.toml"
+            path.write_text(text)
+            configs = load_stack_configs(path, [])
+            self.assertEqual([config["stack_name"] for config in configs],
+                             [f"agent-{index}" for index in range(1, 13)])
+            for layer in ("platform", "simulator"):
+                self.assertEqual(len({
+                    state_path(environment_root(config), layer, config["environment"]) for config in configs
+                }), 12)
+            self.assertEqual(len({
+                state_path(environment_root(config), config["stack_name"], config["environment"])
+                for config in configs
+            }), 12)
+            for config in configs:
+                self.assertEqual(config["platform"]["existing_sandbox_subnet_id"], subnet)
+                self.assertNotEqual(config["platform"]["existing_private_endpoint_subnet_id"], subnet)
+                self.assertEqual(config["shared_foundry"], {
+                    "mode": "existing", "account_resource_id": account, "model_deployment_name": "gpt-6-1-sol",
+                })
+                self.assertEqual(config["agents"][0]["name"], config["stack_name"])
+                self.assertEqual(config["images"], self.image_manifest)
+                self.assertFalse(config["platform"]["registry_enabled"])
+                self.assertFalse(config["platform"]["scheduler_enabled"])
+            with patch("scripts.simulator_preflight.run", side_effect=AssertionError("Offline means no Azure calls")):
+                self.assertEqual(len(plan(configs, offline=True)), 12)
+            self.assertEqual(load_stack_configs(path, ["agent-12"]), [configs[-1]])
+            for index in range(1, 13):
+                with self.subTest(dedicated_stack=index):
+                    path.write_text(text.replace(
+                        f'existing_resource_group_name = "rg-training-agent-{index}"\n',
+                        f'existing_resource_group_name = "rg-training-agent-{index}"\n'
+                        f'existing_sandbox_subnet_id = "{subnet}-{index}"\n',
+                    ))
+                    changed = load_stack_configs(path, [])
+                    self.assertEqual(len(changed), 12)
+                    self.assertEqual(changed[index - 1]["platform"]["existing_sandbox_subnet_id"],
+                                     f"{subnet}-{index}")
+            path.write_text(text + f'existing_private_endpoint_subnet_id = "{subnet.upper()}"\n')
+            with self.assertRaisesRegex(ValueError, "Sandbox and private endpoint subnet"):
+                load_stack_configs(path, ["agent-1"])
+            path.write_text(text.replace('existing_resource_group_name = "rg-training-agent-12"',
+                                         'existing_resource_group_name = "RG-TRAINING-AGENT-1"'))
+            with self.assertRaisesRegex(ValueError, "own resource group"):
+                load_stack_configs(path, ["agent-1"])
+            path.write_text(text.replace(
+                'existing_resource_group_name = "rg-training-agent-12"', 'existing_resource_group_name = "central"',
+            ))
+            with self.assertRaisesRegex(ValueError, "Shared Foundry requires a resource group separate"):
+                load_stack_configs(path, ["agent-1"])
 
     def test_private_defaults_require_explicit_customer_boundaries(self):
         with tempfile.TemporaryDirectory() as temporary:

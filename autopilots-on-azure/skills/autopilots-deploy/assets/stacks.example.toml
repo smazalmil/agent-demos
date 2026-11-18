@@ -30,6 +30,7 @@ sandbox_location = "swedencentral"
 model_name = "gpt-6.1-sol"
 model_version = "2026-09-29"
 model_sku_name = "GlobalStandard"
+existing_sandbox_subnet_id = "/subscriptions/11111111-1111-1111-1111-111111111111/resourceGroups/rg-connectivity/providers/Microsoft.Network/virtualNetworks/vnet-training/subnets/sandbox"
 existing_private_endpoint_subnet_id = "/subscriptions/11111111-1111-1111-1111-111111111111/resourceGroups/rg-connectivity/providers/Microsoft.Network/virtualNetworks/vnet-training/subnets/endpoints"
 ampls_id = "/subscriptions/11111111-1111-1111-1111-111111111111/resourceGroups/rg-connectivity/providers/Microsoft.Insights/privateLinkScopes/training-ampls"
 required_tags = { project = "training" }
@@ -39,11 +40,69 @@ name = "agent-1"
 display_name = "Training canary"
 [stacks.platform]
 existing_resource_group_name = "rg-training-agent-1"
-existing_sandbox_subnet_id = "/subscriptions/11111111-1111-1111-1111-111111111111/resourceGroups/rg-connectivity/providers/Microsoft.Network/virtualNetworks/vnet-training/subnets/agent-1"
 
 [[stacks]]
 name = "agent-2"
 display_name = "Training agent 2"
 [stacks.platform]
 existing_resource_group_name = "rg-training-agent-2"
-existing_sandbox_subnet_id = "/subscriptions/11111111-1111-1111-1111-111111111111/resourceGroups/rg-connectivity/providers/Microsoft.Network/virtualNetworks/vnet-training/subnets/agent-2"
+
+[[stacks]]
+name = "agent-3"
+display_name = "Training agent 3"
+[stacks.platform]
+existing_resource_group_name = "rg-training-agent-3"
+
+[[stacks]]
+name = "agent-4"
+display_name = "Training agent 4"
+[stacks.platform]
+existing_resource_group_name = "rg-training-agent-4"
+
+[[stacks]]
+name = "agent-5"
+display_name = "Training agent 5"
+[stacks.platform]
+existing_resource_group_name = "rg-training-agent-5"
+
+[[stacks]]
+name = "agent-6"
+display_name = "Training agent 6"
+[stacks.platform]
+existing_resource_group_name = "rg-training-agent-6"
+
+[[stacks]]
+name = "agent-7"
+display_name = "Training agent 7"
+[stacks.platform]
+existing_resource_group_name = "rg-training-agent-7"
+
+[[stacks]]
+name = "agent-8"
+display_name = "Training agent 8"
+[stacks.platform]
+existing_resource_group_name = "rg-training-agent-8"
+
+[[stacks]]
+name = "agent-9"
+display_name = "Training agent 9"
+[stacks.platform]
+existing_resource_group_name = "rg-training-agent-9"
+
+[[stacks]]
+name = "agent-10"
+display_name = "Training agent 10"
+[stacks.platform]
+existing_resource_group_name = "rg-training-agent-10"
+
+[[stacks]]
+name = "agent-11"
+display_name = "Training agent 11"
+[stacks.platform]
+existing_resource_group_name = "rg-training-agent-11"
+
+[[stacks]]
+name = "agent-12"
+display_name = "Training agent 12"
+[stacks.platform]
+existing_resource_group_name = "rg-training-agent-12"

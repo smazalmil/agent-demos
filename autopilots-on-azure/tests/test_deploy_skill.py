@@ -51,11 +51,18 @@ class DeploySkillTests(unittest.TestCase):
                 text = template.read_text(encoding="utf-8")
                 target.write_text(text)
                 configs = load_stack_configs(target, [])
-                count = 7 if "seven" in template.name else 2
+                count = 12 if template.name == "stacks.example.toml" else 7
                 self.assertEqual(len(configs), count)
                 self.assertTrue(all(config["network_mode"] == "private" for config in configs))
                 self.assertEqual(len({config["platform"]["existing_resource_group_name"] for config in configs}), count)
                 self.assertEqual(len(load_stack_configs(target, ["agent-1"])), 1)
+                if count == 12:
+                    self.assertEqual([config["stack_name"] for config in configs],
+                                     [f"agent-{index}" for index in range(1, 13)])
+                    self.assertEqual(len({
+                        config["platform"]["existing_sandbox_subnet_id"] for config in configs
+                    }), 1)
+                    self.assertEqual(load_stack_configs(target, ["agent-12"]), [configs[-1]])
                 if count == 7:
                     self.assertEqual(load_stack_configs(target, ["agent-dev"])[0]["foundry_mode"], "shared")
                 expiry = (datetime.now(timezone.utc) + timedelta(hours=8)).isoformat()

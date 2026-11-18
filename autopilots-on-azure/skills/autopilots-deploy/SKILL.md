@@ -36,9 +36,14 @@ silently downgrade to demo. See [authentication](references/authentication.md).
 2. Run [prerequisite checks](scripts/Test-DeployPrerequisites.ps1), initialize
    [the workspace](scripts/Initialize-Workspace.ps1), and fill
    [private stack inputs](assets/stacks.example.toml) and
-   [DNS IDs](assets/dns-zones.example.json). Add N explicit stacks, each with
-   its own resource group and delegated subnet. Do not confuse multiple agents
-   in a single environment with independent stacks.
+   [DNS IDs](assets/dns-zones.example.json). The stack template lists
+   `agent-1` through `agent-12`; keep the desired explicit stacks, each with
+   its own resource group. Existing delegated Sandbox subnet references may be
+   shared, but first verify service sharing support, connection limits and
+   capacity for all consumers and future applications; accepting an ID is not
+   that verification. Keep the private endpoint subnet separate. See the
+   [network capacity prerequisites](references/operations.md).
+   Do not confuse multiple agents in a single environment with independent stacks.
 3. Review `plan` before writes. Deploy one canary with `--stack <name>` first;
    run staged commands from [operations](references/operations.md).
 4. Verify health, lifecycle and private networking, then actual customer

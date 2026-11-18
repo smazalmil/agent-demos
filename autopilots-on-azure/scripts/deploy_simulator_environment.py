@@ -217,11 +217,14 @@ def load_stack_configs(path: Path, selected: list[str], *, validate_expiry: bool
     ).casefold() for stack in stacks]
     if len([group for group in groups if group]) != len(set(group for group in groups if group)):
         raise ValueError("Every stack requires its own resource group.")
-    subnets = [{**inputs.get("platform", {}), **stack.get("platform", {})}.get(
-        "existing_sandbox_subnet_id", "",
-    ).casefold() for stack in stacks]
-    if len([subnet for subnet in subnets if subnet]) != len(set(subnet for subnet in subnets if subnet)):
-        raise ValueError("Every stack requires its own dedicated Sandbox subnet; duplicate subnet IDs are prohibited.")
+    subnet_ids = {}
+    for field in ("existing_sandbox_subnet_id", "existing_private_endpoint_subnet_id"):
+        subnet_ids[field] = {
+            value.casefold() for stack in stacks
+            if (value := {**inputs.get("platform", {}), **stack.get("platform", {})}.get(field, ""))
+        }
+    if subnet_ids["existing_sandbox_subnet_id"] & subnet_ids["existing_private_endpoint_subnet_id"]:
+        raise ValueError("Sandbox and private endpoint subnet IDs must be different across all stacks.")
     if inputs["foundry_mode"] == "shared":
         shared = inputs["shared_foundry"]
         shared_group = (shared["account_resource_id"].split("/")[4] if shared["mode"] == "existing"

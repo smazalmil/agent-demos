@@ -1,7 +1,7 @@
 # Agent Chat Simulator deployment
 
-Deploy independent `agent-1` through `agent-6` stacks plus `agent-dev` for canary/IT
-testing. Each has its own RG, simulator, gateway, Hermes runtime, workload
+Deploy independent `agent-1` through `agent-12` stacks, with an optional separate
+`agent-dev` for canary/IT testing. Each has its own RG, simulator, gateway, Hermes runtime, workload
 identities and persistent data. Customer networking, DNS and AMPLS may be shared
 explicitly. Foundry can be pooled or per stack. This channel is not Microsoft Teams: no Agent 365, `a365`, publishing,
 Work IQ or Microsoft 365 licensing is required. DevOps/Clarity MCP is phase 2.
@@ -98,6 +98,12 @@ explicit list is supplied; `stack_count` is configurable. Each explicit stack ca
 override display name, owner, assignment, role assignments and model capacity.
 Each stack has exactly one simulator and Worker.
 
+The deployment skill's [default stack template](../skills/autopilots-deploy/assets/stacks.example.toml)
+lists `agent-1` through `agent-12` with separate existing RGs and one inherited
+existing Sandbox subnet reference. All identifiers are placeholders; copy and
+fill the template outside the source snapshot before deployment. This does not
+change the six-stack fallback when neither `stacks` nor `stack_count` is supplied.
+
 Names are `agent-` followed by 1-3 lowercase alphanumeric characters, including
 `agent-dev`. The 9-character limit keeps native Sandbox Group names within 32
 characters even for the `generated-apps` role. `stack_count` generates numeric
@@ -146,16 +152,47 @@ deployer does not change the external account's auth/network policy.
 
 `network_mode = "private"` and `resource_group_mode = "existing"` are defaults.
 Global `[platform]` is merged with `[stacks.platform]`: AI `location`,
-`sandbox_location`, model name/version/deployment/SKU, existing RG and dedicated
+`sandbox_location`, model name/version/deployment/SKU, existing RG and existing
 delegated Sandbox subnet, shared nondelegated PE subnet, central
 `private_dns_zone_ids`, required tags, optional existing monitoring IDs and
 `ampls_id`. `private_dns_zone_ids_file` optionally loads the map from a JSON file
 relative to the TOML. Existing-mode RGs, VNets, subnets, routes, NSGs, central DNS
 zones/links and existing monitoring resources are not owned by these stacks.
-Resource groups and dedicated Sandbox subnet IDs cannot be duplicated across
-the inventory, even when selecting one stack. Normal `plan` validates subnet
-delegation/size but does not inspect existing Sandbox Group allocations or leases;
-the operator must supply seven free dedicated subnets for a new seven-stack rollout.
+Resource groups cannot be duplicated across the inventory, even when selecting
+one stack. Sandbox subnet IDs may be repeated: set
+`platform.existing_sandbox_subnet_id` once for all stacks, or override it in
+`stacks.platform` to retain separate subnets. The delegated Sandbox subnet and
+the nondelegated private endpoint subnet must remain distinct across the entire
+inventory. Existing subnet mode only references those IDs; stacks do not create,
+import, alter or delete the external subnets. Resource groups, identities,
+Sandbox groups and Terraform workspaces/state remain separate.
+
+Accepting a repeated subnet ID is a deployer configuration capability, **not
+proof that the Azure service supports the intended sharing or has capacity**.
+Before Azure writes, confirm cross-group sharing support for the deployed
+Sandbox API/region, connection limits and IP allocation/reservation overhead
+with the service documentation or Microsoft support. Inventory existing groups,
+connections and leases, including stacks outside this deployment. Size for peak
+concurrent simulator, gateway, runtime and generated-application Sandboxes,
+upgrade overlap and an agreed growth reserve across all consumers. Twelve new
+stacks add 48 groups/connections (four per stack, including generated-apps);
+with one equivalent existing canary that is 52 connections. A typical later
+application rollout starts three Sandboxes per stack (39 across 13 stacks)
+before generated applications and overlap; empty generated-apps groups are not
+a bound on future usage.
+
+Normal `plan` checks delegation and a minimum prefix size, but does not prove
+free IPs, sharing support, connection capacity or regional core headroom.
+The [Sandbox VNet guide](https://sandboxes.azure.com/docs/sandboxes/sandbox/vnet)
+recommends sizing for peak concurrency plus headroom, with `/23` or larger as
+a safe default. Do not treat `/26` (or any accepted prefix) as sufficient just
+because validation passes. Check actual
+[Sandbox quotas](https://sandboxes.azure.com/docs/sandboxes/limits), private
+endpoint subnet capacity and the existing shared model's throughput separately.
+Unknown concurrency, IP overhead or sharing limits must be recorded as
+unverified prerequisites, never inferred from successful configuration parsing
+or from another connection already using the subnet. Do not expand or replace
+customer networking without separate approval.
 
 Required service DNS zones are `privatelink.cognitiveservices.azure.com`,
 `privatelink.openai.azure.com`, `privatelink.services.ai.azure.com`, and
@@ -309,25 +346,27 @@ native/backend startup remains an error.
 
 ### Current validation status
 
-Recorded on 2026-11-14 for a DEMO stack in a private test landing zone, built from
-source `8302807c39132a43f58db9f4a228bada81ec259e` and its matching
-`deployment-images` artifact. That test deployment has since been torn down.
+Recorded on 2026-11-14 for one clean-install DEMO stack built from source
+`9e08464e68c39c3b71ca0644cc50c83138d9a66b` and its matching `deployment-images`
+artifact. Later repository commits are not those deployed images.
 
 | Check | Result |
 | --- | --- |
 | DEMO login with the correct and a wrong access code (API) | Passed |
 | Real model reply with a fresh nonce through simulator, gateway and Hermes | Passed |
-| File upload and download with an exact SHA-256 match (API) | Passed |
-| Local script on an uploaded TXT: write an upper-case copy, keep the original | Passed: the downloaded output equals `original.upper()` byte for byte; native run events show the command reading the uploaded input |
-| Simulator opens in a browser over normal TLS (private network) | Passed |
-| `validate_run` evidence check | Failed: the native run reports empty provider/model metadata |
-| Browser download comparison and model-generated widget | Not run |
-| Entra browser acceptance | Not run |
+| File upload and download with an exact SHA-256 match | Passed |
+| Model-generated HTML widget | Failed delivery: the gateway returned an error at a transient `waiting_for_approval` state. The original run later completed with a genuine widget, without an approval bypass, but that completion was not delivered |
+| Widget submit and same-chat follow-up | Not run |
+| Browser acceptance (`tests/e2e_private/demo_smoke.mjs`) | Attempted privately, not accepted: reply/widget failed with native HTTP 409; its exact cause remains unestablished |
+| Normal-TLS browser login | Not validated: the observed login used a certificate-error exception |
+| Browser file upload/download | Inconclusive; the separate API check above passed |
 
-The script test ran with `approvals.unattended_mode: approve` set manually in that
-Worker's `config.yaml`; there is no approval UI, and a new Role Release overwrites
-the setting. Approval and clarification waits now keep polling the same admitted
-run. The remaining checks above are open; this is not a customer-release approval.
+The source-only repair from `9e1e9d6` is integrated into `main`: approval and
+clarification waits continue polling the same admitted run at 0.5 s, preserve
+native controls, and retain the existing deadline without admitting another run.
+It has not been rebuilt or deployed and does not fix or explain the separate
+browser HTTP 409 by assertion. The remaining full-acceptance checks above and
+Entra browser evidence are still open. This is not a customer-release approval.
 
 ## Cost and teardown
 
